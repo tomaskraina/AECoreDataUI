@@ -182,6 +182,7 @@ public class CoreDataTableViewController: UITableViewController, NSFetchedResult
     public func controllerDidChangeContent(controller: NSFetchedResultsController) {
         if beganUpdates {
             tableView.endUpdates()
+            beganUpdates = false
         }
     }
     
@@ -337,6 +338,10 @@ public class CoreDataCollectionViewController: UICollectionViewController, NSFet
         }
     }
     
+    
+    public var reloadInsteadOfBatchUpdates = true
+    
+    
     // MARK: NSFetchedResultsControllerDelegate Helpers
     
     private var sectionInserts = [Int]()
@@ -346,8 +351,6 @@ public class CoreDataCollectionViewController: UICollectionViewController, NSFet
     private var objectInserts = [NSIndexPath]()
     private var objectDeletes = [NSIndexPath]()
     private var objectUpdates = [NSIndexPath]()
-    private var objectMoves = [NSIndexPath]()
-    private var objectReloads = Set<NSIndexPath>()
     
     private func updateSectionsAndObjects() {
         // sections
@@ -382,15 +385,7 @@ public class CoreDataCollectionViewController: UICollectionViewController, NSFet
             self.collectionView?.reloadItemsAtIndexPaths(self.objectUpdates)
             self.objectUpdates.removeAll(keepCapacity: true)
         }
-        if !self.objectMoves.isEmpty {
-            let moveOperations = objectMoves.count / 2
-            var index = 0
-            for _ in 0 ..< moveOperations {
-                self.collectionView?.moveItemAtIndexPath(self.objectMoves[index], toIndexPath: self.objectMoves[index + 1])
-                index = index + 2
-            }
-            self.objectMoves.removeAll(keepCapacity: true)
-        }
+
     }
     
     // MARK: NSFetchedResultsControllerDelegate
@@ -428,16 +423,39 @@ public class CoreDataCollectionViewController: UICollectionViewController, NSFet
     public func controller(controller: NSFetchedResultsController, didChangeObject anObject: AnyObject, atIndexPath indexPath: NSIndexPath?, forChangeType type: NSFetchedResultsChangeType, newIndexPath: NSIndexPath?) {
         switch type {
         case .Insert:
-            objectInserts.append(newIndexPath!)
+            
+            guard let nip = newIndexPath else { break }
+            if indexPath == nil { /// - Note: Bug fix for iOS 8.4, `indexPath` must be nil for `.insert`.
+                objectInserts.append(nip)
+            }
+            
         case .Delete:
-            objectDeletes.append(indexPath!)
+            guard let ip = indexPath else { break }
+            objectDeletes.append(ip)
+            
         case .Update:
-            objectUpdates.append(indexPath!)
+            
+            /// - Note: iOS 10 sometimes reports `.update` instead of `.move` (`indexPath != newIndexPath`)
+            /// also, iOS 9 sometimes reports `newIndexPath = nil`, so this logic is here to avoid crashes.
+            if let indexPath = indexPath, let newIndexPath = newIndexPath where indexPath != newIndexPath {
+                objectInserts.append(newIndexPath)
+                objectDeletes.append(indexPath)
+            } else {
+                objectUpdates.append(indexPath!)
+            }
+            
         case .Move:
-            objectMoves.append(indexPath!)
-            objectMoves.append(newIndexPath!)
-            objectReloads.insert(indexPath!)
-            objectReloads.insert(newIndexPath!)
+            
+            guard let indexPath = indexPath, newIndexPath = newIndexPath
+                /// - Note: Bug fix for iOS 9
+                where indexPath != newIndexPath else {
+                    break
+            }
+            
+            /// - Note: The real `.move` logic is replaced with delete/insert to avoid crashes on iOS 8/9/10.
+            objectInserts.append(newIndexPath)
+            objectDeletes.append(indexPath)
+            
         }
     }
     
@@ -449,14 +467,17 @@ public class CoreDataCollectionViewController: UICollectionViewController, NSFet
     public func controllerDidChangeContent(controller: NSFetchedResultsController) {
         if !suspendAutomaticTrackingOfChangesInManagedObjectContext {
             // do batch updates on collection view
-            collectionView?.performBatchUpdates({ () -> Void in
+            
+            if reloadInsteadOfBatchUpdates {
+                collectionView?.reloadData()
+                return
+            }
+            
+            
+            collectionView?.performBatchUpdates({
                 self.updateSectionsAndObjects()
                 }, completion: { (finished) -> Void in
-                    // reload moved items when finished
-                    if self.objectReloads.count > 0 {
-                        self.collectionView?.reloadItemsAtIndexPaths(Array(self.objectReloads))
-                        self.objectReloads.removeAll()
-                    }
+//                    print("collectionView?.performBatchUpdates finished: \(finished)")
             })
         }
     }
