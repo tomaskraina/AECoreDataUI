@@ -85,6 +85,7 @@ open class CoreDataCollectionViewController: UICollectionViewController, NSFetch
                 _suspendAutomaticTrackingOfChangesInManagedObjectContext = true
             } else {
                 DispatchQueue.main.asyncAfter(deadline: .now()) {
+                    self.clearChanges()
                     self._suspendAutomaticTrackingOfChangesInManagedObjectContext = false
                 }
             }
@@ -92,6 +93,15 @@ open class CoreDataCollectionViewController: UICollectionViewController, NSFetch
     }
     
     fileprivate var _suspendAutomaticTrackingOfChangesInManagedObjectContext: Bool = false
+    
+    fileprivate func clearChanges() {
+        if !sectionDeletes.isEmpty { sectionDeletes.removeAll(keepingCapacity: true) }
+        if !sectionUpdates.isEmpty { sectionUpdates.removeAll(keepingCapacity: true) }
+        if !sectionInserts.isEmpty { sectionInserts.removeAll(keepingCapacity: true) }
+        if !objectDeletes.isEmpty { objectDeletes.removeAll(keepingCapacity: true) }
+        if !objectUpdates.isEmpty { objectUpdates.removeAll(keepingCapacity: true) }
+        if !objectInserts.isEmpty { objectInserts.removeAll(keepingCapacity: true) }
+    }
     
     // MARK: - API
     
