@@ -1,6 +1,6 @@
 Pod::Spec.new do |s|
     s.name = 'AECoreDataUI'
-    s.version = '3.1.1'
+    s.version = '3.1.2'
     s.summary = 'Super awesome Core Data driven UI for iOS written in Swift'
 
     s.homepage = 'https://github.com/tadija/AECoreDataUI'
